@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Reading Exam Portal</title>
+    <link rel="stylesheet" href="/static/styles.css"> <!-- Link to external CSS -->
+</head>
+<body>
+    <header>
+        <h1>📖 Reading Exam Portal</h1>
+    </header>
+    <main>
+        <div id="exam-content" class="container">
+            <p>Loading content, please wait...</p>
+        </div>
+        <button id="submit-button" onclick="submitAnswers()">Submit Answers</button>
+    </main>
+    <footer>
+        <p>&copy; 2024 Reading Exam Portal. All Rights Reserved.</p>
+    </footer>
+
+    <script>
+        const apiUrl = "/api/exam_sets";
+        const answers = {};
+
+        async function fetchExamData() {
+            const examContent = document.getElementById("exam-content");
+            try {
+                const response = await fetch(apiUrl);
+                const data = await response.json();
+                renderExam(data);
+            } catch (error) {
+                examContent.innerHTML = `<p class="error">Error loading content: ${error.message}</p>`;
+            }
+        }
+
+        function renderExam(data) {
+            const examContent = document.getElementById("exam-content");
+            examContent.innerHTML = "";
+
+            data.forEach(set => {
+                set.passages.forEach(passage => {
+                    let contentHtml = `
+                        <div class="passage">
+                            <h2>${passage.title}</h2>
+                            <p class="author"><strong>Author:</strong> ${passage.author}</p>
+                            ${Object.entries(passage.content).map(([key, text]) => `
+                                <p><strong>${key}:</strong> ${text}</p>`).join('')}
+                            ${renderQuestions(passage.questions)}
+                        </div>`;
+                    examContent.innerHTML += contentHtml;
+                });
+            });
+        }
+
+        function renderQuestions(questions) {
+            return Object.values(questions).map(group => `
+                <div class="questions">
+                    <h3>${group.question_type}</h3>
+                    ${group.items.map(item => `
+                        <div class="question">
+                            <p>${item.question}</p>
+                            ${renderInput(group.question_type, item)}
+                        </div>
+                    `).join('')}
+                </div>
+            `).join('');
+        }
+
+        function renderInput(type, item) {
+            if (type === "Multiple Choice Questions") {
+                return item.options.map(option => `
+                    <label>
+                        <input type="radio" name="${item.question}" value="${option}" onchange="saveAnswer('${item.question}', '${option}')">
+                        ${option}
+                    </label><br>
+                `).join('');
+            } else {
+                return `<textarea rows="2" placeholder="Type your answer here" oninput="saveAnswer('${item.question}', this.value)"></textarea>`;
+            }
+        }
+
+        function saveAnswer(question, answer) {
+            answers[question] = answer;
+        }
+
+        async function submitAnswers() {
+            const response = await fetch("/submit", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ answers })
+            });
+
+            const result = await response.json();
+            displayResults(result.results);
+        }
+
+        function displayResults(results) {
+            const examContent = document.getElementById("exam-content");
+            examContent.innerHTML = `<h2>Results</h2>`;
+
+            for (const [question, result] of Object.entries(results)) {
+                examContent.innerHTML += `
+                    <div class="result">
+                        <p><strong>Question:</strong> ${question}</p>
+                        <p><strong>Your Answer:</strong> ${result.user_answer ? result.user_answer : "<em>Not Answered</em>"}</p>
+                        <p><strong>Correct Answer:</strong> ${result.correct_answer}</p>
+                        <p class="${result.is_correct ? 'correct' : 'incorrect'}">
+                            ${result.is_correct ? "✅ Correct" : "❌ Incorrect"}
+                        </p>
+                    </div>
+                `;
+            }
+        }
+
+        fetchExamData();
+    </script>
+</body>
+</html>
